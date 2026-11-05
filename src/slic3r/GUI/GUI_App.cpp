@@ -1151,6 +1151,7 @@ void GUI_App::post_init()
         });
     }
 
+#if 0 // GalloStudio: Desativa alerta de migracao de nuvem legado do OrcaSlicer
     // Orca: notify users upgrading from a pre-2.4.0 version that profile syncing
     // moved from Bambu Cloud to Orca Cloud.
     if (is_editor() && m_last_config_version && m_last_config_version->valid()
@@ -1177,6 +1178,7 @@ void GUI_App::post_init()
             dlg.ShowModal();
         });
     }
+#endif
 
     if(!m_networking_need_update && m_agent) {
         m_agent->set_on_ssdp_msg_fn(
