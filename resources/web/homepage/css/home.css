@@ -244,13 +244,13 @@ body
 	text-decoration: underline;
 }
 
-/*----Bambu Cloud, folded under the main account----*/
+/*----Bambu Cloud Section----*/
 #BambuCloudSection
 {
-	display: none;  /* shown by cloud_providers_info from backend */
-	margin-top: 8px;
-	padding-top: 6px;
-	border-top: 1px solid var(--border-color);
+	display: block;
+	margin-top: 0;
+	padding-top: 0;
+	border-top: none;
 }
 
 #BambuCloudHeader

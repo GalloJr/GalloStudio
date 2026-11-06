@@ -11,7 +11,6 @@ function OnInit()
         AppendTemplate(pluginTip, T("plugin_not_detected", "Bambu Network plug-in not detected. Click <a>here</a> to install it."),
                        pluginTip.querySelector("a"));
 
-	SendMsg_GetLoginInfo();
 	SendMsg_GetBambuLoginInfo();
 	SendMsg_GetRecentFile();
 	SendMsg_GetStaffPick();
@@ -135,11 +134,7 @@ function HandleStudio( pVal )
       $("#BambuCloudSection").hide();
     }
 
-    if (providers.indexOf("orca") >= 0) {
-      $("#LeftBoard").show();
-    } else {
-      $("#LeftBoard").hide();
-    }
+    $("#LeftBoard").show();
   } else if (strCmd == "network_plugin_installtip") {
     // Bambu Cloud is unreachable without the network plugin, so its row only carries the tip.
     let bMissing = pVal["show"] * 1 == 1;
@@ -244,6 +239,7 @@ function OnAvatarLoadError(img) {
 
 function SetAccountSignedIn(strProvider, strAvatar, strName, strHandle) {
   var account = AccountRows[strProvider];
+  if (!account) return;
 
   $(account.name).text(strName).attr("title", strName);  /*----long names are ellipsized----*/
   SetAccountAvatar(account.avatar, strAvatar);
@@ -256,6 +252,7 @@ function SetAccountSignedIn(strProvider, strAvatar, strName, strHandle) {
 
 function SetAccountSignedOut(strProvider) {
   var account = AccountRows[strProvider];
+  if (!account) return;
 
   if (m_OpenAccountMenu === strProvider) CloseAccountMenu();
   $(account.name).text('').removeAttr("title");
