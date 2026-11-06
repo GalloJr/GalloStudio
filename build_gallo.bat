@@ -11,6 +11,10 @@ if exist "%VSCMAKE%\cmake.exe" (
     set "PATH=%VSCMAKE%;%PATH%"
 )
 
+REM Limita os processos paralelos do MSVC para evitar esgotamento de heap/PDB RPC
+set "_CL_=/MP4"
+set "CL_MPCount=4"
+
 echo ========================================================
 echo               GalloStudio Build Tool
 echo ========================================================
