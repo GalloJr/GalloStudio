@@ -859,8 +859,10 @@ bool MainFrame::handle_global_shortcut(const KeyChord& chord)
     case Shortcut::GoToPrepare: m_tabpanel->SelectPageByName(TAB_ID_PREPARE); break;
     case Shortcut::GoToPreview: m_tabpanel->SelectPageByName(TAB_ID_PREVIEW); break;
     case Shortcut::GoToDevice:
-        if (!m_tabpanel->SelectPageByName(TAB_ID_MONITOR))
+        if (wxGetApp().preset_bundle && !wxGetApp().preset_bundle->use_bbl_device_tab())
             m_tabpanel->SelectPageByName(TAB_ID_MONITOR_WEB);
+        else
+            m_tabpanel->SelectPageByName(TAB_ID_MONITOR);
         break;
     case Shortcut::GoToMultiDevice: m_tabpanel->SelectPageByName(TAB_ID_MULTI_DEVICE); break;
     case Shortcut::GoToProject:     m_tabpanel->SelectPageByName(TAB_ID_PROJECT); break;
@@ -1609,15 +1611,19 @@ void MainFrame::init_tabpanel() {
         //BBS add pages
     m_monitor_page = new LazyPage<MonitorPanel>(m_tabpanel, TAB_ID_MONITOR, 20);
     m_lazy_pages.push_back(m_monitor_page);
-    m_tabpanel->AddPage(TAB_ID_MONITOR, m_monitor_page, _L("Device"), "tab_monitor_active");
+    m_tabpanel->AddPage(TAB_ID_MONITOR, m_monitor_page, _L("Bambu"), "tab_monitor_active");
 
     m_printer_view_page = new LazyPage<PrinterWebView>(m_tabpanel, TAB_ID_MONITOR_WEB, 50, [this](wxWindow* parent) {
         auto* view = new PrinterWebView(parent);
-        if (!m_printer_url.empty())
-            view->load_url(m_printer_url, m_printer_api_key);
+        if (m_printer_url.empty()) {
+            std::string port = ensure_snapmaker_control_running();
+            m_printer_url = wxString::Format("http://127.0.0.1:%s/web/flutter_web/device_control?locale=en-US&dark_model=1", port);
+        }
+        view->load_url(m_printer_url, m_printer_api_key);
         return view;
     });
     m_lazy_pages.push_back(m_printer_view_page);
+    m_tabpanel->AddPage(TAB_ID_MONITOR_WEB, m_printer_view_page, _L("Snap"), "tab_monitor_active");
     Bind(EVT_LOAD_PRINTER_URL, [this](LoadPrinterViewEvent &evt) {
         //select_tab(MainFrame::tpMonitor);
         m_printer_url     = evt.GetString();
@@ -1665,124 +1671,46 @@ void MainFrame::init_tabpanel() {
 void MainFrame::show_device(bool should_use_native) {
     auto idx = -1;
 
-    const bool use_printer_agents = wxGetApp().app_config->get_bool("use_printer_agents");
-
-    // The web Device page is the extra tab printer-agents mode shows alongside the native one.
-    // Printers that drive the native Bambu device tab have nothing to put in it, so they don't
-    // get it — otherwise a Bambu user sees two Device tabs, one of them permanently empty.
-    const bool want_web_device_tab = use_printer_agents && wxGetApp().preset_bundle != nullptr &&
-                                     !wxGetApp().preset_bundle->use_bbl_device_tab();
-
-    // Remove the extra page before switching to any layout that shouldn't have it.
-    if (!want_web_device_tab) {
-        if ((idx = m_tabpanel->FindPageByName(TAB_ID_MONITOR_WEB)) != wxNOT_FOUND) {
-            m_printer_view_page->Show(false);
-            m_tabpanel->RemovePage(idx);
-        }
-    }
-
-    if (use_printer_agents) {
-        if (!m_monitor_page->in_book()) {
-            if ((idx = m_tabpanel->FindPage(m_printer_view_page)) != wxNOT_FOUND) {
-                m_printer_view_page->Show(false);
-                m_tabpanel->RemovePage(idx);
-            }
-            m_monitor_page->Show(false);
-            m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_PREVIEW}), TAB_ID_MONITOR, m_monitor_page,
-                                   _L("Device"), "tab_monitor_active");
-        }
-
-        if (wxGetApp().is_enable_multi_machine()) {
-            // TODO: change the bitmap
-            if (!m_multi_machine_page->in_book()) {
-                m_multi_machine_page->Show(false);
-                // Past the web Device tab when it is already there, so enabling multi-machine
-                // later can't wedge this page between the two Device tabs.
-                m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_MONITOR_WEB, TAB_ID_MONITOR}),
-                                       TAB_ID_MULTI_DEVICE, m_multi_machine_page, _L("Multi-device"), "tab_multi_active");
-            }
-        }
-        if (!m_calibration_page->in_book()) {
-            m_calibration_page->Show(false);
-            m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_PROJECT}), TAB_ID_CALIBRATION, m_calibration_page,
-                                   _L("Calibration"), "tab_calibration_active");
-        }
-
-        if (want_web_device_tab) {
-            if ((idx = m_tabpanel->FindPage(m_printer_view_page)) == wxNOT_FOUND) {
-                m_printer_view_page->Show(false);
-                // Immediately right of the native Device tab, not at the end of the tab bar.
-                m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_MONITOR}), TAB_ID_MONITOR_WEB,
-                                       m_printer_view_page, _L("Device (Web)"), "tab_monitor_active");
-            } else {
-                m_tabpanel->SetPageText(idx, _L("Device (Web)"));
-            }
-        }
-
-#ifdef _MSW_DARK_MODE
-        wxGetApp().UpdateDarkUIWin(this);
-#endif // _MSW_DARK_MODE
-
-        fit_tab_labels(); // ORCA on printer change
-        m_plugin_pages.relayout(); // re-sync plugin tabs against the native tabs just mutated above
-        if (m_prebuild_started)
-            m_idle.start();
-        return;
-    }
-
-    if (should_use_native) {
-        if (m_monitor_page->in_book()) {
-            fit_tab_labels(); // ORCA on printer change - same button layout
-            return;
-        }
-        // Remove printer view
-        if ((idx = m_tabpanel->FindPage(m_printer_view_page)) != wxNOT_FOUND) {
-            m_printer_view_page->Show(false);
-            m_tabpanel->RemovePage(idx);
-        }
-
-        // Insert monitor page
+    // 1. Ensure Bambu page is present
+    if (!m_monitor_page->in_book()) {
         m_monitor_page->Show(false);
         m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_PREVIEW}), TAB_ID_MONITOR, m_monitor_page,
-                               _L("Device"), "tab_monitor_active");
-
-        if (wxGetApp().is_enable_multi_machine()) {
-            // TODO: change the bitmap
-            m_multi_machine_page->Show(false);
-            m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_MONITOR}), TAB_ID_MULTI_DEVICE, m_multi_machine_page,
-                                   _L("Multi-device"), "tab_multi_active");
+                               _L("Bambu"), "tab_monitor_active");
+    } else {
+        if ((idx = m_tabpanel->FindPage(m_monitor_page)) != wxNOT_FOUND) {
+            m_tabpanel->SetPageText(idx, _L("Bambu"));
         }
+    }
+
+    // 2. Ensure Snap page is present immediately after Bambu
+    if (!m_printer_view_page->in_book()) {
+        m_printer_view_page->Show(false);
+        m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_MONITOR}), TAB_ID_MONITOR_WEB,
+                               m_printer_view_page, _L("Snap"), "tab_monitor_active");
+    } else {
+        if ((idx = m_tabpanel->FindPage(m_printer_view_page)) != wxNOT_FOUND) {
+            m_tabpanel->SetPageText(idx, _L("Snap"));
+        }
+    }
+
+    if (wxGetApp().is_enable_multi_machine()) {
+        if (!m_multi_machine_page->in_book()) {
+            m_multi_machine_page->Show(false);
+            m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_MONITOR_WEB, TAB_ID_MONITOR}),
+                                   TAB_ID_MULTI_DEVICE, m_multi_machine_page, _L("Multi-device"), "tab_multi_active");
+        }
+    }
+
+    if (!m_calibration_page->in_book()) {
         m_calibration_page->Show(false);
-        // Last of the built-in tabs, but plugin tabs already sit past it — anchor rather than
-        // append, so its position doesn't depend on the relayout() below running afterwards.
         m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_PROJECT}), TAB_ID_CALIBRATION, m_calibration_page,
                                _L("Calibration"), "tab_calibration_active");
+    }
 
 #ifdef _MSW_DARK_MODE
-        wxGetApp().UpdateDarkUIWin(this);
+    wxGetApp().UpdateDarkUIWin(this);
 #endif // _MSW_DARK_MODE
 
-    } else {
-        if (m_printer_view_page->in_book()) {
-            fit_tab_labels(); // ORCA on printer change - same button layout
-            return;
-        }
-        if ((idx = m_tabpanel->FindPage(m_calibration_page)) != wxNOT_FOUND) {
-            m_calibration_page->Show(false);
-            m_tabpanel->RemovePage(idx);
-        }
-        if ((idx = m_tabpanel->FindPage(m_multi_machine_page)) != wxNOT_FOUND) {
-            m_multi_machine_page->Show(false);
-            m_tabpanel->RemovePage(idx);
-        }
-        if ((idx = m_tabpanel->FindPage(m_monitor_page)) != wxNOT_FOUND) {
-            m_monitor_page->Show(false);
-            m_tabpanel->RemovePage(idx);
-        }
-        m_printer_view_page->Show(false);
-        m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_PREVIEW}), TAB_ID_MONITOR, m_printer_view_page,
-                               _L("Device"), "tab_monitor_active");
-    }
     fit_tab_labels(); // ORCA on printer change
     m_plugin_pages.relayout(); // re-sync plugin tabs against the native tabs just mutated above
     if (m_prebuild_started)
@@ -4646,11 +4574,181 @@ void MainFrame::load_url(wxString url)
 
 void MainFrame::load_printer_url(wxString url, wxString apikey)
 {
+    PresetBundle* pb = wxGetApp().preset_bundle;
+    if (pb) {
+        auto cfg = pb->printers.get_edited_preset().config;
+        std::string printer_model = cfg.opt_string("printer_model");
+        std::string vendor_name = "";
+        if (pb->printers.get_edited_preset().vendor) {
+            vendor_name = pb->printers.get_edited_preset().vendor->name;
+        }
+        bool is_snapmaker = (vendor_name == "Snapmaker") ||
+                            (printer_model.find("Snapmaker") != std::string::npos) ||
+                            (printer_model.find("U1") != std::string::npos);
+        if (is_snapmaker && (url.empty() || url.find("missing_connection.html") != std::string::npos)) {
+            std::string port = ensure_snapmaker_control_running();
+            url = wxString::Format("http://127.0.0.1:%s/web/flutter_web/device_control?locale=en-US&dark_model=1", port);
+        }
+    }
+
     BOOST_LOG_TRIVIAL(trace) << "load_printer_url:" << url;
     auto evt = new LoadPrinterViewEvent(EVT_LOAD_PRINTER_URL, this->GetId());
     evt->SetString(url);
     evt->SetAPIkey(apikey);
     wxQueueEvent(this, evt);
+}
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
+#include <fstream>
+#include <thread>
+#include <chrono>
+
+#ifdef _WIN32
+static HANDLE s_snapmaker_proc = NULL;
+static HANDLE s_snapmaker_pipe_in = NULL;
+
+static bool is_pid_alive(DWORD pid) {
+    if (pid == 0) return false;
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProcess) return false;
+    DWORD exitCode = 0;
+    bool alive = false;
+    if (GetExitCodeProcess(hProcess, &exitCode)) {
+        alive = (exitCode == STILL_ACTIVE);
+    }
+    CloseHandle(hProcess);
+    return alive;
+}
+#endif
+
+std::string MainFrame::ensure_snapmaker_control_running()
+{
+    std::vector<boost::filesystem::path> lock_paths;
+    const char* appdata_env = std::getenv("APPDATA");
+    if (appdata_env) {
+        boost::filesystem::path appdata_base(appdata_env);
+        lock_paths.push_back(appdata_base / "Snapmaker_Orca" / "snapmaker_control" / "data" / "snapmaker_control.lock");
+        lock_paths.push_back(appdata_base / "GalloStudio" / "snapmaker_control" / "data" / "snapmaker_control.lock");
+
+        boost::filesystem::path hive_dir = appdata_base / "Snapmaker_Orca" / "snapmaker_control" / "data" / "hive";
+        if (boost::filesystem::exists(hive_dir)) {
+            boost::system::error_code ec;
+            for (boost::filesystem::directory_iterator it(hive_dir, ec), end; it != end; ++it) {
+                if (it->path().extension() == ".lock") {
+                    boost::filesystem::remove(it->path(), ec);
+                }
+            }
+            boost::filesystem::path cur_hive = hive_dir / "dc_host.hive";
+            boost::filesystem::path bak_hive = hive_dir / "dc_host.hive.bak";
+            if (boost::filesystem::exists(cur_hive)) {
+                if (boost::filesystem::file_size(cur_hive, ec) > 10000) {
+                    boost::filesystem::copy_file(cur_hive, bak_hive, boost::filesystem::copy_options::overwrite_existing, ec);
+                } else if (boost::filesystem::exists(bak_hive) && boost::filesystem::file_size(bak_hive, ec) > 10000) {
+                    boost::filesystem::copy_file(bak_hive, cur_hive, boost::filesystem::copy_options::overwrite_existing, ec);
+                }
+            }
+        }
+    }
+
+    auto read_port_from_lock = [](const boost::filesystem::path& p) -> std::string {
+        if (!boost::filesystem::exists(p)) return "";
+        try {
+            std::ifstream f(p.string());
+            nlohmann::json j;
+            f >> j;
+            if (j.contains("port") && j["port"].is_number()) {
+#ifdef _WIN32
+                if (j.contains("pid") && j["pid"].is_number()) {
+                    DWORD pid = (DWORD)j["pid"].get<int>();
+                    if (!is_pid_alive(pid)) {
+                        boost::system::error_code ec;
+                        boost::filesystem::remove(p, ec);
+                        return "";
+                    }
+                }
+#endif
+                return std::to_string(j["port"].get<int>());
+            }
+        } catch (...) {}
+        return "";
+    };
+
+#ifdef _WIN32
+    if (s_snapmaker_proc != NULL) {
+        DWORD exitCode = 0;
+        if (GetExitCodeProcess(s_snapmaker_proc, &exitCode) && exitCode == STILL_ACTIVE) {
+            for (const auto& lp : lock_paths) {
+                std::string port = read_port_from_lock(lp);
+                if (!port.empty()) return port;
+            }
+            return "30996";
+        } else {
+            CloseHandle(s_snapmaker_proc);
+            s_snapmaker_proc = NULL;
+            if (s_snapmaker_pipe_in) {
+                CloseHandle(s_snapmaker_pipe_in);
+                s_snapmaker_pipe_in = NULL;
+            }
+        }
+    }
+#endif
+
+    for (const auto& lp : lock_paths) {
+        std::string port = read_port_from_lock(lp);
+        if (!port.empty()) return port;
+    }
+
+#ifdef _WIN32
+    boost::filesystem::path exe_path = boost::filesystem::path(Slic3r::resources_dir()) / "snapmaker_control_windows_x64.exe";
+    if (boost::filesystem::exists(exe_path)) {
+        HANDLE hPipeRead = NULL;
+        HANDLE hPipeWrite = NULL;
+        SECURITY_ATTRIBUTES sa;
+        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+        sa.bInheritHandle = TRUE;
+        sa.lpSecurityDescriptor = NULL;
+
+        if (CreatePipe(&hPipeRead, &hPipeWrite, &sa, 0)) {
+            SetHandleInformation(hPipeWrite, HANDLE_FLAG_INHERIT, 0);
+        }
+
+        STARTUPINFOA si;
+        PROCESS_INFORMATION pi;
+        ZeroMemory(&si, sizeof(si));
+        si.cb = sizeof(si);
+        si.dwFlags = STARTF_USESHOWWINDOW | (hPipeRead ? STARTF_USESTDHANDLES : 0);
+        si.wShowWindow = SW_HIDE;
+        si.hStdInput = hPipeRead ? hPipeRead : GetStdHandle(STD_INPUT_HANDLE);
+        si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+        si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+        ZeroMemory(&pi, sizeof(pi));
+
+        std::string cmd = "\"" + exe_path.string() + "\" --orca --locale=en-US";
+        std::vector<char> cmd_buf(cmd.begin(), cmd.end());
+        cmd_buf.push_back('\0');
+
+        if (CreateProcessA(NULL, cmd_buf.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+            s_snapmaker_proc = pi.hProcess;
+            s_snapmaker_pipe_in = hPipeWrite;
+            CloseHandle(pi.hThread);
+        } else {
+            if (hPipeWrite) CloseHandle(hPipeWrite);
+        }
+        if (hPipeRead) CloseHandle(hPipeRead);
+
+        for (int i = 0; i < 30; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            for (const auto& lp : lock_paths) {
+                std::string port = read_port_from_lock(lp);
+                if (!port.empty()) return port;
+            }
+        }
+    }
+#endif
+
+    return "30996";
 }
 
 void MainFrame::load_printer_url()
@@ -4660,6 +4758,23 @@ void MainFrame::load_printer_url()
         return;
 
     auto     cfg = preset_bundle.printers.get_edited_preset().config;
+    std::string printer_model = cfg.opt_string("printer_model");
+    std::string vendor_name = "";
+    if (preset_bundle.printers.get_edited_preset().vendor) {
+        vendor_name = preset_bundle.printers.get_edited_preset().vendor->name;
+    }
+    bool is_snapmaker = (vendor_name == "Snapmaker") ||
+                        (printer_model.find("Snapmaker") != std::string::npos) ||
+                        (printer_model.find("U1") != std::string::npos);
+
+    if (is_snapmaker) {
+        std::string port = ensure_snapmaker_control_running();
+        if (!port.empty()) {
+            wxString flutter_url = wxString::Format("http://127.0.0.1:%s/web/flutter_web/device_control?locale=en-US&dark_model=1", port);
+            load_printer_url(flutter_url, "");
+            return;
+        }
+    }
     if (cfg.opt_string("print_host").empty()) {
         if (auto *device_manager = wxGetApp().getDeviceManager()) {
             auto *machine = device_manager->get_selected_machine();
@@ -4682,7 +4797,10 @@ void MainFrame::load_printer_url()
     }
 }
 
-bool MainFrame::is_printer_view() const { return m_tabpanel->GetSelectedPageName() == TAB_ID_MONITOR; }
+bool MainFrame::is_printer_view() const {
+    const wxString tab = m_tabpanel->GetSelectedPageName();
+    return tab == TAB_ID_MONITOR || tab == TAB_ID_MONITOR_WEB;
+}
 
 
 void MainFrame::refresh_plugin_tips()

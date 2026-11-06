@@ -1147,3 +1147,58 @@ body.cloud-mode #LeftBoard
 	cursor: pointer!important;
 	pointer-events: auto!important;
 }
+
+/*----Snapmaker Cloud Section----*/
+#SnapmakerCloudSection
+{
+	display: block;
+	margin-top: 8px;
+	padding-top: 6px;
+	border-top: 1px solid var(--border-color);
+}
+
+#SnapmakerCloudHeader
+{
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 28px;
+	padding: 0 12px 0 8px;
+	border-radius: 6px;
+	font-size: 12px;
+	color: var(--fg-color-label);
+	cursor: pointer;
+	user-select: none;
+}
+
+#SnapmakerCloudHeader:hover
+{
+	color: var(--fg-color-text);
+}
+
+#SnapmakerCloudHeader.Expanded .SectionChevron
+{
+	transform: rotate(90deg);
+}
+
+#SnapmakerStatusDot
+{
+	flex: 0 0 auto;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background-color: var(--main-color-fixed);
+}
+
+#SnapmakerCloudBody
+{
+	max-height: 0;
+	overflow: hidden;
+	transition: max-height 0.25s ease;
+}
+
+#SnapmakerCloudBody.Expanded
+{
+	max-height: 200px;
+	padding-bottom: 2px;
+}

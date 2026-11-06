@@ -264,7 +264,19 @@ function SetAccountSignedOut(strProvider) {
   $(account.dot).removeClass("Online");
 }
 
+function ToggleSnapmakerSection() {
+  var body = $("#SnapmakerCloudBody");
+  var header = $("#SnapmakerCloudHeader");
+  var bExpanded = !body.hasClass("Expanded");
+  body.toggleClass("Expanded", bExpanded);
+  header.toggleClass("Expanded", bExpanded).attr("aria-expanded", bExpanded ? "true" : "false");
+}
+
 function OnAccountRowClick(strProvider) {
+  if (strProvider === "snapmaker") {
+    SendSimpleCommand("homepage_snapmaker_open_device");
+    return;
+  }
   var account = AccountRows[strProvider];
   var row = $(account.row);
   if (row.hasClass("Disabled")) return;
@@ -319,8 +331,8 @@ function ToggleBambuSection() {
 }
 
 function Set_AccountMenu_Event() {
-  var bExpanded = false;
-  try { bExpanded = localStorage.getItem(BAMBU_FOLD_KEY) === "1"; } catch (e) {}
+  var bExpanded = true;
+  try { if (localStorage.getItem(BAMBU_FOLD_KEY) === "0") bExpanded = false; } catch (e) {}
   SetBambuSectionExpanded(bExpanded, false);
 
   $(document).mousedown(function (e) {

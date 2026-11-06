@@ -5644,6 +5644,37 @@ std::string GUI_App::handle_web_request(std::string cmd)
                     request_user_logout(ORCA_CLOUD_PROVIDER, /*user_initiated=*/true);
                 });
             }
+            else if (command_str.compare("homepage_snapmaker_open_device") == 0) {
+                CallAfter([this] {
+                    if (mainframe) {
+                        Tab *printer_tab = GUI::wxGetApp().get_tab(Preset::Type::TYPE_PRINTER);
+                        if (printer_tab && preset_bundle) {
+                            std::string snap_preset = "";
+                            for (const auto& p : preset_bundle->printers) {
+                                if (p.name.find("Snapmaker U1 (0.4 nozzle)") != std::string::npos) {
+                                    snap_preset = p.name;
+                                    break;
+                                }
+                            }
+                            if (snap_preset.empty()) {
+                                for (const auto& p : preset_bundle->printers) {
+                                    if (p.name.find("Snapmaker") != std::string::npos) {
+                                        snap_preset = p.name;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!snap_preset.empty()) {
+                                printer_tab->select_preset(snap_preset);
+                            }
+                        }
+                        std::string port = MainFrame::ensure_snapmaker_control_running();
+                        wxString flutter_url = wxString::Format("http://127.0.0.1:%s/web/flutter_web/device_control?locale=en-US&dark_model=1", port);
+                        mainframe->load_printer_url(flutter_url, "");
+                        mainframe->select_tab(TAB_ID_MONITOR_WEB);
+                    }
+                });
+            }
             else if (command_str.compare("homepage_modeldepot") == 0) {
                 CallAfter([this] { open_mall_page_dialog(); });
             }

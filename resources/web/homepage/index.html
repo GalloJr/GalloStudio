@@ -72,6 +72,32 @@
 			</div>
 		</div>
 
+		<!-- Snapmaker Cloud Section (WAN / Google) -->
+		<div id="SnapmakerCloudSection">
+			<div id="SnapmakerCloudHeader" class="Expanded" tabindex="0" role="button" aria-expanded="true" aria-controls="SnapmakerCloudBody"
+				 onClick="ToggleSnapmakerSection()">
+				<svg class="SectionChevron" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+					<path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+				<span class="SectionLabel">Snapmaker Cloud (WAN)</span>
+				<span id="SnapmakerStatusDot" class="StatusDot Online"></span>
+			</div>
+
+			<div id="SnapmakerCloudBody" class="Expanded">
+				<div id="SnapmakerAccount" class="AccountRow AccountRowCompact SignedIn" tabindex="0" role="button" aria-haspopup="false"
+					 onClick="OnAccountRowClick('snapmaker')">
+					<span class="AccountAvatar">
+						<img id="SnapmakerAvatarIcon" class="AccountAvatarImg" alt="" src="../image/logo.png" />
+					</span>
+					<span class="AccountText">
+						<span id="SnapmakerUserName" class="AccountName">Snapmaker (201289)</span>
+						<span class="AccountSecondary">Conectado via Google</span>
+					</span>
+					<span class="AccountSignIn" style="background:#009688;color:#ffffff;padding:4px 10px;border-radius:4px;font-weight:600;font-size:12px;">Abrir Dispositivo</span>
+				</div>
+			</div>
+		</div>
+
 		<!-- Shared account menu, anchored under the row it was opened from.
 		     The row already carries the avatar, name and provider, so the menu only
 		     adds the account handle. -->
