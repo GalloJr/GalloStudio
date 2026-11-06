@@ -6452,7 +6452,7 @@ void Sidebar::sync_ams_list(bool is_from_big_sync_btn)
     wxGetApp().app_config ->set("ams_filament_ids", p->ams_list_device, ams_filament_ids);
     if (!unknowns.empty()) {
         MessageDialog dlg(this,
-            _L("There are some unknown or incompatible filaments mapped to generic preset.\nPlease update Orca Slicer or restart Orca Slicer to check if there is an update to system presets.") + detail,
+            _L("There are some unknown or incompatible filaments mapped to generic preset.\nPlease update Gallo Studio or restart Gallo Studio to check if there is an update to system presets.") + detail,
             _L("Sync filaments with AMS"), wxOK);
         dlg.ShowModal();
     }
@@ -14756,7 +14756,7 @@ void Plater::priv::set_project_name(const wxString& project_name)
     if (!m_project_name.IsEmpty())
         wxGetApp().mainframe->update_title_colour_after_set_title();
 #else
-    wxGetApp().mainframe->SetTitle(m_project_name + " - OrcaSlicer");
+    wxGetApp().mainframe->SetTitle(m_project_name + " - Gallo Studio");
     wxGetApp().mainframe->topbar()->SetTitle(m_project_name);
 #endif
 }
@@ -14776,7 +14776,7 @@ void Plater::priv::update_title_dirty_status()
     wxGetApp().mainframe->SetTitle(title);
     wxGetApp().mainframe->update_title_colour_after_set_title();
 #else
-    wxGetApp().mainframe->SetTitle(title + " - OrcaSlicer");
+    wxGetApp().mainframe->SetTitle(title + " - Gallo Studio");
     wxGetApp().mainframe->topbar()->SetTitle(title);
 #endif    
 }
@@ -16788,7 +16788,7 @@ void Plater::import_model_id(wxString download_info)
             unused_filename.clear();
         }
         if (unused_filename.empty()) {
-            msg = _L("Importing to Orca Slicer failed. Please download the file and manually import it.");
+            msg = _L("Importing to Gallo Studio failed. Please download the file and manually import it.");
             return;
         }
         filename = from_u8(unused_filename);
@@ -16847,7 +16847,7 @@ void Plater::import_model_id(wxString download_info)
                         error);
 
                     if (retry_count == max_retries) {
-                        msg = _L("Importing to Orca Slicer failed. Please download the file and manually import it.");
+                        msg = _L("Importing to Gallo Studio failed. Please download the file and manually import it.");
                         cont = false;
                     }
                 })
@@ -16870,7 +16870,7 @@ void Plater::import_model_id(wxString download_info)
                         }
                         boost::system::error_code ec;
                         fs::remove(tmp_path, ec);
-                        msg = _L("Importing to Orca Slicer failed. Please download the file and manually import it.");
+                        msg = _L("Importing to Gallo Studio failed. Please download the file and manually import it.");
                 }).perform_sync();
 
                 // for break while
@@ -22838,7 +22838,7 @@ void Plater::pop_warning_and_go_to_device_page(wxString printer_name, PrinterWar
                                        printer_name);
         } else {
             content = wxString::Format(
-                _L("OrcaSlicer can't connect to %s. Please check if the printer is powered on and connected to the network."), printer_name);
+                _L("Gallo Studio can't connect to %s. Please check if the printer is powered on and connected to the network."), printer_name);
         }
     } else if (type == PrinterWarningType::INCONSISTENT) {
         content = wxString::Format(_L("The currently connected printer on the device page is not %s. Please switch to %s before syncing."), printer_name, printer_name);

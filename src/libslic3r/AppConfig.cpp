@@ -1861,6 +1861,7 @@ std::vector<std::string> AppConfig::get_cloud_providers() const
     std::string providers = get(SETTING_CLOUD_PROVIDERS);
     if (providers.empty()) {
         result.push_back("orca");
+        result.push_back("bbl");
         return result;
     }
 
@@ -1873,6 +1874,9 @@ std::vector<std::string> AppConfig::get_cloud_providers() const
     // Ensure "orca" is always present
     if (std::find(result.begin(), result.end(), "orca") == result.end()) {
         result.insert(result.begin(), "orca");
+    }
+    if (std::find(result.begin(), result.end(), "bbl") == result.end()) {
+        result.push_back("bbl");
     }
     return result;
 }

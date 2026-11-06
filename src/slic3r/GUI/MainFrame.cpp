@@ -509,7 +509,7 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_
     default:
     case GUI_App::EAppMode::Editor:
         m_taskbar_icon = std::make_unique<OrcaSlicerTaskBarIcon>(wxTBI_DOCK);
-        m_taskbar_icon->SetIcon(wxIcon(Slic3r::var("OrcaSlicer-mac_256px.ico"), wxBITMAP_TYPE_ICO), "OrcaSlicer");
+        m_taskbar_icon->SetIcon(wxIcon(Slic3r::var("OrcaSlicer-mac_256px.ico"), wxBITMAP_TYPE_ICO), "GalloStudio");
         break;
     case GUI_App::EAppMode::GCodeViewer:
         break;
@@ -1550,6 +1550,11 @@ void MainFrame::init_tabpanel() {
 #endif
         else if (panel == m_monitor_page) {
             //monitor
+        }
+        else if (panel == m_printer_view_page) {
+            std::string port = ensure_snapmaker_control_running();
+            wxString flutter_url = wxString::Format("http://127.0.0.1:%s/web/flutter_web/device_control?locale=en-US&dark_model=1", port);
+            load_printer_url(flutter_url, "");
         }
 #ifdef SLIC3R_CAD
         // Any page that is not Design takes the Design status line down with it — see

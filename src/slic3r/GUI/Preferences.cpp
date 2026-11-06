@@ -1897,22 +1897,22 @@ void PreferencesDialog::create_items()
         g_sizer->Add(item_open_default_apps);
     } else {
         //// FILES > Extensions
-        g_sizer->Add(create_item_title(_L("Associate files to OrcaSlicer")), 1, wxEXPAND);
+        g_sizer->Add(create_item_title(_L("Associate files to Gallo Studio")), 1, wxEXPAND);
 
-        auto item_associate_3mf    = create_item_checkbox(_L("Associate 3MF files to OrcaSlicer"), _L("If enabled, this sets OrcaSlicer as the default application to open 3MF files.") , "associate_3mf");
+        auto item_associate_3mf    = create_item_checkbox(_L("Associate 3MF files to Gallo Studio"), _L("If enabled, this sets Gallo Studio as the default application to open 3MF files.") , "associate_3mf");
         g_sizer->Add(item_associate_3mf);
 
-        auto item_associate_drc    = create_item_checkbox(_L("Associate DRC files to OrcaSlicer"), _L("If enabled, sets OrcaSlicer as default application to open DRC files."), "associate_drc");
+        auto item_associate_drc    = create_item_checkbox(_L("Associate DRC files to Gallo Studio"), _L("If enabled, sets Gallo Studio as default application to open DRC files."), "associate_drc");
         g_sizer->Add(item_associate_drc);
 
-        auto item_associate_stl    = create_item_checkbox(_L("Associate STL files to OrcaSlicer"), _L("If enabled, this sets OrcaSlicer as the default application to open STL files.") , "associate_stl");
+        auto item_associate_stl    = create_item_checkbox(_L("Associate STL files to Gallo Studio"), _L("If enabled, this sets Gallo Studio as the default application to open STL files.") , "associate_stl");
         g_sizer->Add(item_associate_stl);
 
-        auto item_associate_step   = create_item_checkbox(_L("Associate STEP files to OrcaSlicer"), _L("If enabled, this sets OrcaSlicer as the default application to open STEP files."), "associate_step");
+        auto item_associate_step   = create_item_checkbox(_L("Associate STEP files to Gallo Studio"), _L("If enabled, this sets Gallo Studio as the default application to open STEP files."), "associate_step");
         g_sizer->Add(item_associate_step);
 
         //// FILES > WebLinks
-        g_sizer->Add(create_item_title(_L("Associate web links to OrcaSlicer")), 1, wxEXPAND);
+        g_sizer->Add(create_item_title(_L("Associate web links to Gallo Studio")), 1, wxEXPAND);
 
         auto associate_url_prusa   = create_item_link_association(L"prusaslicer", "Printables.com");
         g_sizer->Add(associate_url_prusa);
@@ -1949,7 +1949,7 @@ void PreferencesDialog::create_items()
 
     auto item_auto_reslice = create_item_auto_reslice(
         _L("Auto slice after changes"),
-        _L("If enabled, OrcaSlicer will re-slice automatically whenever slicing-related settings change."),
+        _L("If enabled, Gallo Studio will re-slice automatically whenever slicing-related settings change."),
         _L("Delay in seconds before auto slicing starts, allowing multiple edits to be grouped. Use 0 to slice immediately."));
     g_sizer->Add(item_auto_reslice);
 
@@ -1960,7 +1960,7 @@ void PreferencesDialog::create_items()
     auto item_mix_print_high_low_temperature = create_item_checkbox(_L("Remove mixed temperature restriction"), _L("With this option enabled, you can print materials with a large temperature difference together."), "enable_high_low_temp_mixed_printing");
     g_sizer->Add(item_mix_print_high_low_temperature);
 
-    auto item_remember_print_action = create_item_checkbox(_L("Remember last print action"), _L("If enabled, OrcaSlicer will remember the last selected option in the print button's dropdown (e.g. Print, Export plate sliced file, Export G-code file) and use it as the default on next startup."), "remember_print_action");
+    auto item_remember_print_action = create_item_checkbox(_L("Remember last print action"), _L("If enabled, Gallo Studio will remember the last selected option in the print button's dropdown (e.g. Print, Export plate sliced file, Export G-code file) and use it as the default on next startup."), "remember_print_action");
     g_sizer->Add(item_remember_print_action);
 
     //// BEHAVIOUR > Preview
@@ -2416,7 +2416,7 @@ void PreferencesDialog::create_items()
 
     auto item_plugin_printer_agents = create_item_checkbox(
         _L("Use printer agents instead of print hosts"), _L(
-            "Route print jobs for non-Bambu printers through printer plug-in agents instead of the classic print-host upload flow.\nWhen disabled, OrcaSlicer uses the legacy print-host behavior."),
+            "Route print jobs for non-Bambu printers through printer plug-in agents instead of the classic print-host upload flow.\nWhen disabled, Gallo Studio uses the legacy print-host behavior."),
         "use_printer_agents");
     g_sizer->Add(item_plugin_printer_agents);
 
