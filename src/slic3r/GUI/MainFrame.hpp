@@ -489,6 +489,7 @@ public:
     void        load_printer_url(wxString url, wxString apikey = "");
     void        load_printer_url();
     static std::string ensure_snapmaker_control_running();
+    bool        auto_bind_snapmaker_if_connected();
     bool        is_printer_view() const;
     void        refresh_plugin_tips();
     void RunScript(wxString js);

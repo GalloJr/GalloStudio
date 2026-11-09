@@ -36,6 +36,7 @@
 #include <utility>
 #include "libslic3r/libslic3r.h"
 #include <nlohmann/json.hpp>
+#include "slic3r/Utils/Http.hpp"
 #include <algorithm>
 #include <wx/dirdlg.h>
 #include <exception>
@@ -1525,6 +1526,7 @@ void MainFrame::init_tabpanel() {
         //wxString page_text = m_tabpanel->GetPageText(sel);
         m_last_selected_tab = m_tabpanel->GetSelectedPageName();
         if (panel == m_plater) {
+            auto_bind_snapmaker_if_connected();
             if (m_last_selected_tab == TAB_ID_PREPARE) {
                 wxPostEvent(m_plater, SimpleEvent(EVT_GLVIEWTOOLBAR_3D));
                 m_param_panel->OnActivate();
@@ -1555,6 +1557,7 @@ void MainFrame::init_tabpanel() {
             std::string port = ensure_snapmaker_control_running();
             wxString flutter_url = wxString::Format("http://127.0.0.1:%s/web/flutter_web/device_control?locale=en-US&dark_model=1", port);
             load_printer_url(flutter_url, "");
+            auto_bind_snapmaker_if_connected();
         }
 #ifdef SLIC3R_CAD
         // Any page that is not Design takes the Design status line down with it — see
@@ -2040,7 +2043,12 @@ bool MainFrame::can_send_gcode() const
         auto cfg = wxGetApp().preset_bundle->printers.get_edited_preset().config;
 
         const auto *print_host_opt = cfg.option<ConfigOptionString>("print_host");
-        if (! print_host_opt) return false;
+        if (!print_host_opt || print_host_opt->value.empty()) {
+            if (const_cast<MainFrame*>(this)->auto_bind_snapmaker_if_connected()) {
+                return true;
+            }
+            return false;
+        }
         else return !print_host_opt->value.empty();
     }
     return true;
@@ -4777,6 +4785,7 @@ void MainFrame::load_printer_url()
         if (!port.empty()) {
             wxString flutter_url = wxString::Format("http://127.0.0.1:%s/web/flutter_web/device_control?locale=en-US&dark_model=1", port);
             load_printer_url(flutter_url, "");
+            auto_bind_snapmaker_if_connected();
             return;
         }
     }
@@ -4800,6 +4809,80 @@ void MainFrame::load_printer_url()
     if (!url.empty()) {
         load_printer_url(url, apikey);
     }
+}
+
+bool MainFrame::auto_bind_snapmaker_if_connected()
+{
+    PresetBundle* pb = wxGetApp().preset_bundle;
+    if (!pb) return false;
+    auto& preset = pb->printers.get_edited_preset();
+    std::string printer_model = preset.config.opt_string("printer_model");
+    std::string vendor_name = preset.vendor ? preset.vendor->name : "";
+    bool is_snapmaker = (vendor_name == "Snapmaker") ||
+                        (printer_model.find("Snapmaker") != std::string::npos) ||
+                        (printer_model.find("U1") != std::string::npos);
+    if (!is_snapmaker) return false;
+
+    std::string port = ensure_snapmaker_control_running();
+    if (port.empty()) return false;
+
+    std::string url = "http://127.0.0.1:" + port + "/api/devices";
+    bool has_connected_device = false;
+
+    auto http = Http::get(url);
+    http.timeout_connect(1)
+        .timeout_max(2)
+        .on_complete([&](std::string body, unsigned status) {
+            if (status == 200) {
+                try {
+                    auto j = nlohmann::json::parse(body, nullptr, false);
+                    if (!j.is_discarded()) {
+                        if (j.contains("currentDevice") && j["currentDevice"].is_object() &&
+                            j["currentDevice"].value("connected", false)) {
+                            has_connected_device = true;
+                        } else if (j.contains("devices") && j["devices"].is_array()) {
+                            for (const auto& dev : j["devices"]) {
+                                if (dev.value("connected", false) || dev.value("online", 0) == 1) {
+                                    has_connected_device = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (...) {}
+            }
+        })
+        .perform_sync();
+
+    if (has_connected_device) {
+        std::string expected_host = "http://127.0.0.1:" + port;
+        std::string current_host = preset.config.opt_string("print_host");
+        bool updated = false;
+
+        if (current_host != expected_host) {
+            preset.config.set_key_value("print_host", new ConfigOptionString(expected_host));
+            preset.config.set_key_value("host_type", new ConfigOptionEnum<PrintHostType>(htOctoPrint));
+
+            if (m_plater) {
+                m_plater->on_config_change(preset.config);
+            }
+            if (Tab* printer_tab = wxGetApp().get_tab(Preset::TYPE_PRINTER)) {
+                printer_tab->update_dirty();
+                printer_tab->reload_config();
+            }
+            updated = true;
+            BOOST_LOG_TRIVIAL(info) << "auto_bind_snapmaker_if_connected: automatically bound Snapmaker at " << expected_host;
+        }
+
+        if (m_print_select != eSendGcode) {
+            select_print_action(eSendGcode);
+        } else {
+            m_print_enable = get_enable_print_status();
+            m_print_btn->Enable(m_print_enable);
+        }
+        return true;
+    }
+    return false;
 }
 
 bool MainFrame::is_printer_view() const {

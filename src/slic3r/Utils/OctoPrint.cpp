@@ -36,6 +36,9 @@
 #include "slic3r/GUI/BonjourDialog.hpp"
 #include <boost/asio/ip/address.hpp>
 #include <cstddef>
+#include <nlohmann/json.hpp>
+#include <thread>
+#include <chrono>
 
 namespace pt = boost::property_tree;
 
@@ -200,6 +203,20 @@ bool OctoPrint::test_with_resolved_ip(wxString &msg) const
         .ssl_revoke_best_effort(m_ssl_revoke_best_effort)
         .perform_sync();
 
+    if (!res && (url.find("127.0.0.1") != std::string::npos || url.find("localhost") != std::string::npos)) {
+        bool snap_ok = false;
+        auto snap_http = Http::get(substitute_host(make_url("api/status"), GUI::into_u8(msg)));
+        snap_http.timeout_connect(1).timeout_max(2).on_complete([&](std::string snap_body, unsigned status) {
+            if (status == 200 && snap_body.find("\"status\":\"ok\"") != std::string::npos) {
+                snap_ok = true;
+            }
+        }).perform_sync();
+        if (snap_ok) {
+            res = true;
+            msg.Clear();
+        }
+    }
+
     return res;
 }
 #endif //WIN32
@@ -256,6 +273,20 @@ bool OctoPrint::test(wxString& msg) const
 #endif // WIN32
         .perform_sync();
 
+    if (!res && (m_host.find("127.0.0.1") != std::string::npos || m_host.find("localhost") != std::string::npos)) {
+        bool snap_ok = false;
+        auto snap_http = Http::get(make_url("api/status"));
+        snap_http.timeout_connect(1).timeout_max(2).on_complete([&](std::string snap_body, unsigned status) {
+            if (status == 200 && snap_body.find("\"status\":\"ok\"") != std::string::npos) {
+                snap_ok = true;
+            }
+        }).perform_sync();
+        if (snap_ok) {
+            res = true;
+            msg.Clear();
+        }
+    }
+
     return res;
 }
 
@@ -272,8 +303,194 @@ wxString OctoPrint::get_test_failed_msg (wxString &msg) const
         , _L("Note: OctoPrint version 1.1.0 or higher is required."));
 }
 
+static bool upload_snapmaker_control(const std::string& host_url, const PrintHostUpload& upload_data, PrintHost::ProgressFn prorgess_fn, PrintHost::ErrorFn error_fn, PrintHost::InfoFn info_fn)
+{
+    std::string base = host_url;
+    if (base.back() != '/') base += '/';
+
+    // Verify /api/status
+    bool is_snap = false;
+    auto check_http = Http::get(base + "api/status");
+    check_http.timeout_connect(1).timeout_max(2).on_complete([&](std::string b, unsigned s) {
+        if (s == 200 && b.find("\"status\":\"ok\"") != std::string::npos) is_snap = true;
+    }).perform_sync();
+
+    if (!is_snap) return false;
+
+    const auto upload_filename = upload_data.upload_path.filename();
+    std::string upload_api_url = base + "api/upload";
+
+    bool start_print = (upload_data.post_action == PrintHostPostUploadAction::StartPrint);
+
+    nlohmann::json post_body;
+    post_body["file_path"] = upload_data.source_path.string();
+    post_body["filename"] = upload_filename.string();
+    post_body["auto_start"] = start_print;
+
+    std::string job_id;
+    bool upload_submitted = false;
+    std::string err_msg;
+
+    auto upload_http = Http::post(upload_api_url);
+    upload_http.header("Content-Type", "application/json");
+    upload_http.set_post_body(post_body.dump());
+    upload_http.timeout_connect(5).timeout_max(60);
+    upload_http.on_error([&](std::string body, std::string err, unsigned status) {
+        err_msg = err + " (HTTP " + std::to_string(status) + "): " + body;
+    });
+    upload_http.on_complete([&](std::string body, unsigned status) {
+        if (status == 200 || status == 202) {
+            try {
+                auto j = nlohmann::json::parse(body);
+                if (j.contains("data") && j["data"].contains("job_id")) {
+                    job_id = j["data"]["job_id"].get<std::string>();
+                    upload_submitted = true;
+                }
+            } catch (...) {}
+        }
+    });
+    upload_http.perform_sync();
+
+    if (!upload_submitted || job_id.empty()) {
+        error_fn(GUI::from_u8("Snapmaker upload failed: " + err_msg));
+        return true;
+    }
+
+    info_fn(L"upload", GUI::from_u8("Uploading to Snapmaker Cloud..."));
+
+    // Poll upload job progress until done
+    std::string poll_url = base + "api/upload/" + job_id;
+    bool finished = false;
+    bool success = false;
+    int max_polls = 600; // 300 seconds max (5 minutes)
+    std::string empty_buf;
+    int current_pct = 0;
+
+    std::string s3_url;
+    std::string s3_checksum;
+    uint64_t s3_size = 0;
+    std::string printer_sn;
+
+    while (!finished && max_polls-- > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        bool cancel = false;
+        Http::Progress dummy_prog(0, 0, 100, current_pct, empty_buf);
+        prorgess_fn(dummy_prog, cancel);
+        if (cancel) {
+            error_fn(_L("Upload cancelled"));
+            return true;
+        }
+
+        auto poll_http = Http::get(poll_url);
+        poll_http.timeout_connect(2).timeout_max(5);
+        poll_http.on_complete([&](std::string body, unsigned status) {
+            if (status == 200) {
+                try {
+                    auto j = nlohmann::json::parse(body);
+                    if (j.contains("data")) {
+                        const auto& d = j["data"];
+                        std::string state = d.value("state", "");
+                        
+                        if (d.contains("ratio")) {
+                            double r = d["ratio"].get<double>();
+                            current_pct = std::min(100, std::max(0, static_cast<int>(r * 100.0)));
+                        } else if (d.contains("sent") && d.contains("total")) {
+                            uint64_t sent = d["sent"].get<uint64_t>();
+                            uint64_t tot = d["total"].get<uint64_t>();
+                            if (tot > 0) current_pct = std::min(100, static_cast<int>((sent * 100) / tot));
+                        }
+
+                        if (state == "done") {
+                            finished = true;
+                            success = true;
+                            current_pct = 100;
+                            s3_url = d.value("url", "");
+                            s3_checksum = d.value("checksum", "");
+                            s3_size = d.value("size", 0ULL);
+                            printer_sn = d.value("sn", "");
+                        } else if (state == "error" || state == "failed") {
+                            finished = true;
+                            success = false;
+                            err_msg = d.value("error", d.value("message", "Upload failed"));
+                        }
+                    }
+                } catch (...) {}
+            }
+        });
+        poll_http.perform_sync();
+    }
+
+    if (!success) {
+        error_fn(GUI::from_u8("Snapmaker print upload failed: " + err_msg));
+        return true;
+    }
+
+    // If cloud URL was provided (WAN mode), send server.files.pull RPC so printer downloads from cloud
+    if (!s3_url.empty()) {
+        info_fn(L"rpc", GUI::from_u8("Notifying printer to download file..."));
+
+        nlohmann::json rpc_body;
+        if (!printer_sn.empty()) {
+            rpc_body["sn"] = printer_sn;
+        }
+        rpc_body["method"] = "server.files.pull";
+        rpc_body["params"]["url"] = s3_url;
+        rpc_body["params"]["auto_start"] = start_print;
+        if (!s3_checksum.empty()) {
+            rpc_body["params"]["checksum"] = s3_checksum;
+        }
+        if (s3_size > 0) {
+            rpc_body["params"]["size"] = s3_size;
+        }
+
+        std::string rpc_url = base + "api/rpc";
+        auto rpc_http = Http::post(rpc_url);
+        rpc_http.header("Content-Type", "application/json");
+        rpc_http.set_post_body(rpc_body.dump());
+        rpc_http.timeout_connect(5).timeout_max(30);
+
+        bool rpc_ok = false;
+        std::string rpc_err;
+        rpc_http.on_error([&](std::string b, std::string e, unsigned s) {
+            rpc_err = e + " (HTTP " + std::to_string(s) + ")";
+        });
+        rpc_http.on_complete([&](std::string body, unsigned status) {
+            if (status == 200) {
+                try {
+                    auto j = nlohmann::json::parse(body);
+                    if (j.value("code", 0) == 200) {
+                        rpc_ok = true;
+                    } else {
+                        rpc_err = j.value("msg", "Printer RPC rejected");
+                    }
+                } catch (...) {
+                    rpc_ok = true;
+                }
+            }
+        });
+        rpc_http.perform_sync();
+
+        if (!rpc_ok) {
+            error_fn(GUI::from_u8("Upload succeeded to cloud, but notifying printer failed: " + rpc_err));
+            return true;
+        }
+    }
+
+    if (start_print) {
+        info_fn(L"complete", _L("File sent to Snapmaker! Print will start once downloaded."));
+    } else {
+        info_fn(L"complete", _L("File uploaded successfully to Snapmaker"));
+    }
+    return true;
+}
+
 bool OctoPrint::upload(PrintHostUpload upload_data, ProgressFn prorgess_fn, ErrorFn error_fn, InfoFn info_fn) const
 {
+    if (m_host.find("127.0.0.1") != std::string::npos || m_host.find("localhost") != std::string::npos) {
+        if (upload_snapmaker_control(m_host, upload_data, prorgess_fn, error_fn, info_fn)) {
+            return true;
+        }
+    }
 #ifndef WIN32
     return upload_inner_with_host(std::move(upload_data), prorgess_fn, error_fn, info_fn);
 #else
@@ -922,6 +1139,20 @@ bool PrusaLink::test_with_resolved_ip_and_method_check(wxString& msg, bool& use_
         })
         .ssl_revoke_best_effort(m_ssl_revoke_best_effort)
         .perform_sync();
+
+    if (!res && (url.find("127.0.0.1") != std::string::npos || url.find("localhost") != std::string::npos)) {
+        bool snap_ok = false;
+        auto snap_http = Http::get(substitute_host(make_url("api/status"), GUI::into_u8(msg)));
+        snap_http.timeout_connect(1).timeout_max(2).on_complete([&](std::string snap_body, unsigned status) {
+            if (status == 200 && snap_body.find("\"status\":\"ok\"") != std::string::npos) {
+                snap_ok = true;
+            }
+        }).perform_sync();
+        if (snap_ok) {
+            res = true;
+            msg.Clear();
+        }
+    }
 
     return res;
 }
